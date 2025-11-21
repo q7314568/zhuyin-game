@@ -1,0 +1,17 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Tauri Development",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/src-tauri/target/debug/zhuyin-game.exe",
+            "args": [],
+            "cwd": "${workspaceFolder}/src-tauri",
+            "preLaunchTask": "dev-debug",
+            "env": {
+                "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS": "--remote-debugging-port=9222"
+            }
+        }
+    ]
+}

@@ -1,0 +1,47 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "ui:dev",
+            "type": "shell",
+            "command": "npm run dev",
+            "isBackground": true,
+            "problemMatcher": {
+                "owner": "typescript",
+                "fileLocation": "relative",
+                "pattern": {
+                    "regexp": "^$"
+                },
+                "background": {
+                    "activeOnStart": true,
+                    "beginsPattern": "Vite",
+                    "endsPattern": "Local:"
+                }
+            }
+        },
+        {
+            "label": "build",
+            "type": "cargo",
+            "command": "build",
+            "args": [
+                "--manifest-path=src-tauri/Cargo.toml",
+                "--no-default-features"
+            ],
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "dev-debug",
+            "dependsOn": [
+                "ui:dev",
+                "build"
+            ],
+            "group": "none"
+        }
+    ]
+}
