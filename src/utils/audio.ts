@@ -4,15 +4,12 @@ import { AppConfig } from '../config';
 export const playZhuyin = async (symbol: string, onEnd?: () => void) => {
     if (AppConfig.AUDIO_SOURCE === 'backend') {
         try {
-            await invoke('play_audio', { symbol });
-            // Since backend audio is "fire and forget" in our current implementation, 
-            // we simulate onEnd after a reasonable duration or immediately.
-            // Ideally, the backend should emit an event when audio finishes, but for now:
-            if (onEnd) setTimeout(onEnd, 800); // Approximate duration
+            const duration = await invoke<number>('play_audio', { symbol });
+            // Use the duration returned from backend to trigger onEnd
+            if (onEnd) setTimeout(onEnd, duration);
         } catch (error) {
             console.error("Failed to play backend audio:", error);
-            // Fallback to frontend if backend fails? Or just error.
-            // Let's fallback for robustness
+            // Fallback to frontend if backend fails
             console.log("Falling back to frontend audio");
             playFrontendAudio(symbol, onEnd);
         }
@@ -99,4 +96,12 @@ export const playSoundEffect = (type: 'correct' | 'wrong' | 'win' | 'lose') => {
             osc.stop(now + 0.5);
             break;
     }
+};
+
+export const uploadAudio = async (symbol: string, filePath: string) => {
+    await invoke('upload_audio', { symbol, filePath: filePath });
+};
+
+export const resetAllAudio = async () => {
+    await invoke('reset_all_audio');
 };

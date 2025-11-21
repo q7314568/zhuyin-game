@@ -1,3 +1,4 @@
+use rodio::Source;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
@@ -89,42 +90,40 @@ fn play_audio(
     symbol: String,
     state: State<AudioChannel>,
     _app_handle: tauri::AppHandle,
-) -> Result<(), String> {
+) -> Result<u64, String> {
     let tx = state.tx.lock().map_err(|e| e.to_string())?.clone();
 
-    // Spawn a thread to handle audio generation if needed, then send play command
-    thread::spawn(move || {
-        let index = match get_zhuyin_index(&symbol) {
-            Some(i) => i,
-            None => {
-                eprintln!("Invalid Zhuyin symbol: {}", symbol);
-                return;
-            }
-        };
+    let index = match get_zhuyin_index(&symbol) {
+        Some(i) => i,
+        None => return Err(format!("Invalid Zhuyin symbol: {}", symbol)),
+    };
 
-        // Use padded MP3 filename (e.g., 01.mp3)
-        let filename = format!("{:02}.mp3", index);
+    let filename = format!("{:02}.mp3", index);
+    let audio_dir = std::path::Path::new("assets/audio");
+    let path = audio_dir.join(&filename);
 
-        // Ensure assets/audio directory exists
-        let audio_dir = std::path::Path::new("assets/audio");
-        if !audio_dir.exists() {
-            let _ = std::fs::create_dir_all(audio_dir);
-        }
+    if !path.exists() {
+        return Err(format!("Audio file not found: {:?}", path));
+    }
 
-        let path = audio_dir.join(&filename);
+    // Get duration
+    let file = File::open(&path).map_err(|e| e.to_string())?;
+    let source = rodio::Decoder::new(BufReader::new(file)).map_err(|e| e.to_string())?;
 
-        if !path.exists() {
-            eprintln!("Audio file not found: {:?}", path);
-            return;
-        }
+    // Calculate duration in milliseconds
+    // total_duration() returns Option<Duration>
+    let duration_ms = source
+        .total_duration()
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(500); // Default to 500ms if unknown
 
-        // Send play command to the actor thread
-        if let Err(e) = tx.send(AudioCommand::Play(path)) {
-            eprintln!("Failed to send play command: {}", e);
-        }
-    });
+    // Send play command
+    if let Err(e) = tx.send(AudioCommand::Play(path)) {
+        eprintln!("Failed to send play command: {}", e);
+        return Err(e.to_string());
+    }
 
-    Ok(())
+    Ok(duration_ms)
 }
 
 #[tauri::command]
@@ -192,11 +191,89 @@ pub fn run() {
     tauri::Builder::default()
         .manage(AudioChannel { tx: Mutex::new(tx) })
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             greet,
             play_audio,
-            stop_audio_backend
+            stop_audio_backend,
+            upload_audio,
+            reset_all_audio
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[tauri::command]
+fn upload_audio(symbol: String, file_path: String) -> Result<(), String> {
+    println!("Upload request: symbol={}, path={}", symbol, file_path);
+
+    if let Ok(cwd) = std::env::current_dir() {
+        println!("Current working directory: {:?}", cwd);
+    }
+
+    let index = match get_zhuyin_index(&symbol) {
+        Some(i) => i,
+        None => return Err(format!("Invalid Zhuyin symbol: {}", symbol)),
+    };
+
+    let filename = format!("{:02}.mp3", index);
+    let audio_dir = std::path::Path::new("assets/audio");
+    let originals_dir = std::path::Path::new("assets/audio_originals");
+
+    if !audio_dir.exists() {
+        println!("Creating audio dir: {:?}", audio_dir);
+        std::fs::create_dir_all(audio_dir).map_err(|e| e.to_string())?;
+    }
+    if !originals_dir.exists() {
+        println!("Creating originals dir: {:?}", originals_dir);
+        std::fs::create_dir_all(originals_dir).map_err(|e| e.to_string())?;
+    }
+
+    let target_path = audio_dir.join(&filename);
+    let original_path = originals_dir.join(&filename);
+
+    println!("Target path: {:?}", target_path);
+    println!("Original path: {:?}", original_path);
+
+    // Backup original if not already backed up
+    if target_path.exists() && !original_path.exists() {
+        println!("Backing up original...");
+        std::fs::copy(&target_path, &original_path).map_err(|e| {
+            println!("Backup failed: {}", e);
+            e.to_string()
+        })?;
+    }
+
+    // Copy new file
+    println!("Copying new file from {} to {:?}", file_path, target_path);
+    std::fs::copy(&file_path, &target_path).map_err(|e| {
+        println!("Copy failed: {}", e);
+        e.to_string()
+    })?;
+
+    println!("Upload successful");
+    Ok(())
+}
+
+#[tauri::command]
+fn reset_all_audio() -> Result<(), String> {
+    let audio_dir = std::path::Path::new("assets/audio");
+    let originals_dir = std::path::Path::new("assets/audio_originals");
+
+    if !originals_dir.exists() {
+        return Ok(()); // Nothing to restore
+    }
+
+    for entry in std::fs::read_dir(originals_dir).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let path = entry.path();
+        if path.is_file() {
+            if let Some(filename) = path.file_name() {
+                let target_path = audio_dir.join(filename);
+                std::fs::copy(&path, &target_path).map_err(|e| e.to_string())?;
+            }
+        }
+    }
+
+    Ok(())
 }
