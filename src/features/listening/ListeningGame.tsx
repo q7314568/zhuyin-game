@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { getRandomSymbol, generateOptions } from '../utils/zhuyin';
-import { playZhuyin, playSoundEffect, stopAudio } from '../utils/audio';
+import { getRandomSymbol, generateOptions } from '../../utils/zhuyin';
+import { playZhuyin, playSoundEffect, stopAudio } from '../../services/audioService';
 
 interface GameScreenProps {
     lives: number;
@@ -9,7 +9,7 @@ interface GameScreenProps {
     isTimerEnabled: boolean;
 }
 
-const GameScreen: React.FC<GameScreenProps> = ({ lives: initialLives, difficulty, onGameOver, isTimerEnabled }) => {
+const ListeningGame: React.FC<GameScreenProps> = ({ lives: initialLives, difficulty, onGameOver, isTimerEnabled }) => {
     const [lives, setLives] = useState(initialLives);
     const [score, setScore] = useState(0);
     const [target, setTarget] = useState('');
@@ -168,4 +168,4 @@ const GameScreen: React.FC<GameScreenProps> = ({ lives: initialLives, difficulty
     );
 };
 
-export default GameScreen;
+export default ListeningGame;

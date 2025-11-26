@@ -4,7 +4,7 @@ use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::sync::{mpsc, Mutex};
 use std::thread;
-use tauri::{Manager, State};
+use tauri::State;
 
 #[cfg(target_os = "windows")]
 use windows::{
@@ -39,50 +39,6 @@ struct AudioChannel {
 #[tauri::command]
 fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
-}
-
-#[cfg(target_os = "windows")]
-fn generate_audio_file(symbol: &str, path: &Path) -> Result<(), String> {
-    // Initialize COM library for the current thread
-    unsafe {
-        let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
-    }
-
-    let synthesizer = SpeechSynthesizer::new().map_err(|e| e.to_string())?;
-
-    // Set speaking rate to be slower (default is 1.0)
-    let options = synthesizer.Options().map_err(|e| e.to_string())?;
-    options.SetSpeakingRate(0.5).map_err(|e| e.to_string())?;
-
-    // Create a future for synthesis
-    let stream_future = synthesizer
-        .SynthesizeTextToStreamAsync(&windows::core::HSTRING::from(symbol))
-        .map_err(|e| e.to_string())?;
-
-    // Block until the future completes
-    let stream = stream_future.get().map_err(|e| e.to_string())?;
-
-    // Read the stream
-    let size = stream.Size().map_err(|e| e.to_string())?;
-    let reader = DataReader::CreateDataReader(&stream).map_err(|e| e.to_string())?;
-    reader
-        .LoadAsync(size as u32)
-        .map_err(|e| e.to_string())?
-        .get()
-        .map_err(|e| e.to_string())?;
-
-    let mut buffer = vec![0u8; size as usize];
-    reader.ReadBytes(&mut buffer).map_err(|e| e.to_string())?;
-
-    // Write to file
-    std::fs::write(path, buffer).map_err(|e| e.to_string())?;
-
-    Ok(())
-}
-
-#[cfg(not(target_os = "windows"))]
-fn generate_audio_file(_symbol: &str, _path: &Path) -> Result<(), String> {
-    Err("TTS generation is only supported on Windows".to_string())
 }
 
 #[tauri::command]
@@ -135,16 +91,8 @@ fn stop_audio_backend(state: State<AudioChannel>) -> Result<(), String> {
     Ok(())
 }
 
-#[cfg(target_os = "windows")]
-fn pre_generate_all_audio() {
-    // No-op: we use pre-downloaded MP3 files now
-}
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    #[cfg(target_os = "windows")]
-    pre_generate_all_audio();
-
     let (tx, rx) = mpsc::channel();
 
     // Spawn the Audio Actor thread

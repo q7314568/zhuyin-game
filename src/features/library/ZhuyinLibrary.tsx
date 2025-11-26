@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { open, ask, message } from '@tauri-apps/plugin-dialog';
-import { ZHUYIN_SYMBOLS } from '../utils/zhuyin';
-import { playZhuyin, uploadAudio, resetAllAudio } from '../utils/audio';
+import { ZHUYIN_SYMBOLS } from '../../utils/zhuyin';
+import { playZhuyin, uploadAudio, resetAllAudio } from '../../services/audioService';
 
 interface ZhuyinLibraryProps {
     onBack: () => void;
@@ -11,6 +11,7 @@ const ZhuyinLibrary: React.FC<ZhuyinLibraryProps> = ({ onBack }) => {
     const [playingSymbol, setPlayingSymbol] = useState<string | null>(null);
     const [isUploading, setIsUploading] = useState(false);
 
+    // 播放注音音效
     const handlePlay = async (symbol: string) => {
         if (playingSymbol || isUploading) return;
 
@@ -20,12 +21,14 @@ const ZhuyinLibrary: React.FC<ZhuyinLibraryProps> = ({ onBack }) => {
         });
     };
 
+    // 上傳自定義音檔
     const handleUpload = async (e: React.MouseEvent, symbol: string) => {
         e.stopPropagation();
         if (playingSymbol || isUploading) return;
 
         try {
             setIsUploading(true);
+            // 開啟檔案選擇對話框
             const selected = await open({
                 multiple: false,
                 filters: [{
@@ -46,6 +49,7 @@ const ZhuyinLibrary: React.FC<ZhuyinLibraryProps> = ({ onBack }) => {
         }
     };
 
+    // 還原所有音檔
     const handleReset = async () => {
         if (playingSymbol || isUploading) return;
 
@@ -75,8 +79,8 @@ const ZhuyinLibrary: React.FC<ZhuyinLibraryProps> = ({ onBack }) => {
                     onClick={onBack}
                     disabled={!!playingSymbol || isUploading}
                     className={`px-4 py-2 text-white rounded-lg font-semibold transition ${playingSymbol || isUploading
-                            ? 'bg-gray-400 cursor-not-allowed'
-                            : 'bg-gray-500 hover:bg-gray-600'
+                        ? 'bg-gray-400 cursor-not-allowed'
+                        : 'bg-gray-500 hover:bg-gray-600'
                         }`}
                 >
                     返回選單
@@ -86,8 +90,8 @@ const ZhuyinLibrary: React.FC<ZhuyinLibraryProps> = ({ onBack }) => {
                     onClick={handleReset}
                     disabled={!!playingSymbol || isUploading}
                     className={`px-4 py-2 text-white rounded-lg font-semibold transition ${playingSymbol || isUploading
-                            ? 'bg-red-300 cursor-not-allowed'
-                            : 'bg-red-500 hover:bg-red-600'
+                        ? 'bg-red-300 cursor-not-allowed'
+                        : 'bg-red-500 hover:bg-red-600'
                         }`}
                 >
                     一鍵還原
@@ -97,6 +101,7 @@ const ZhuyinLibrary: React.FC<ZhuyinLibraryProps> = ({ onBack }) => {
             <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-4 p-4 bg-white rounded-xl shadow-lg w-full max-w-4xl">
                 {ZHUYIN_SYMBOLS.map((symbol) => (
                     <div key={symbol} className="relative group">
+                        {/* 注音按鈕 */}
                         <button
                             onClick={() => handlePlay(symbol)}
                             disabled={!!playingSymbol || isUploading}
@@ -109,7 +114,7 @@ const ZhuyinLibrary: React.FC<ZhuyinLibraryProps> = ({ onBack }) => {
                         >
                             {symbol}
                         </button>
-                        {/* Upload Button (visible on hover or always visible if preferred, here hover) */}
+                        {/* 上傳按鈕 (懸停時顯示) */}
                         <button
                             onClick={(e) => handleUpload(e, symbol)}
                             disabled={!!playingSymbol || isUploading}
