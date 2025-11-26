@@ -547,6 +547,14 @@ export const useSoundHunterGame = ({ onBack }: UseSoundHunterGameProps) => {
             };
             window.addEventListener('mousemove', handleMouseMove);
 
+            // Mouse Click Listener (Shoot)
+            const handleMouseDown = (e: MouseEvent) => {
+                if (gameStateRef.current.controlMode === 'mouse' && e.button === 0) { // Left click
+                    shoot();
+                }
+            };
+            window.addEventListener('mousedown', handleMouseDown);
+
             // --- Game Loop ---
             app.ticker.add(() => {
                 // Barrel Rotation (Keyboard)
@@ -695,6 +703,7 @@ export const useSoundHunterGame = ({ onBack }: UseSoundHunterGameProps) => {
                 window.removeEventListener('keydown', handleKeyDown);
                 window.removeEventListener('keyup', handleKeyUp);
                 window.removeEventListener('mousemove', handleMouseMove);
+                window.removeEventListener('mousedown', handleMouseDown);
                 app.destroy(true, { children: true, texture: true });
             };
         };
