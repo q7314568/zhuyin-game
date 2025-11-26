@@ -28,7 +28,9 @@ export const SoundHunterGame = ({ onBack }: SoundHunterGameProps) => {
             {/* HUD (抬頭顯示器) */}
             <div className="absolute top-4 right-4 flex flex-col items-end z-10">
                 <div className="text-2xl font-bold text-yellow-400">Score: {score}</div>
-                <div className="text-xl text-blue-300">Combo: {combo}</div>
+                <div className={`text-xl transition-all duration-300 ${combo >= 3 ? 'text-yellow-300 font-black scale-125 drop-shadow-[0_0_5px_rgba(255,215,0,0.8)]' : 'text-blue-300'}`}>
+                    Combo: {combo} {combo >= 3 && '🔥'}
+                </div>
                 <div className={`mt-2 px-3 py-1 rounded-full text-lg font-bold ${ammoType === 'cannon' ? 'bg-yellow-600 text-white' : 'bg-cyan-600 text-white'}`}>
                     {ammoType === 'cannon' ? '💣 砲彈 (Cannon)' : '💨 空氣彈 (Air)'}
                 </div>
@@ -42,6 +44,18 @@ export const SoundHunterGame = ({ onBack }: SoundHunterGameProps) => {
             >
                 🔊
             </button>
+
+            {/* Fever Mode Overlay */}
+            {combo >= 3 && (
+                <div className="absolute inset-0 pointer-events-none z-0 border-8 border-yellow-400 animate-pulse shadow-[inset_0_0_50px_rgba(255,215,0,0.3)]" />
+            )}
+
+            {/* Fever Text */}
+            {combo >= 3 && (
+                <div className="absolute top-24 left-1/2 transform -translate-x-1/2 text-6xl font-black text-yellow-300 animate-bounce drop-shadow-[0_0_15px_rgba(255,215,0,1)] z-20 pointer-events-none">
+                    FEVER!
+                </div>
+            )}
 
             {/* 視覺提示 (鬼影) */}
             {showHint && targetSymbol && (
@@ -57,7 +71,7 @@ export const SoundHunterGame = ({ onBack }: SoundHunterGameProps) => {
                 </div>
             )}
 
-            <div ref={containerRef} className="border-4 border-white rounded-lg overflow-hidden shadow-2xl" />
+            <div ref={containerRef} className="border-4 border-white rounded-lg overflow-hidden shadow-2xl relative z-0" />
 
             <div className="mt-2 text-gray-400 text-sm">
                 聽音辨位：請射擊聽到的注音符號！ | ↑↓ 切換子彈

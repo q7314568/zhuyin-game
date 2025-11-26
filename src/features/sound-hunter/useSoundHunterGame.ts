@@ -4,13 +4,20 @@ import { ZHUYIN_SYMBOLS, getSymbolColor } from '../../utils/zhuyin';
 import { getConfusingSymbols } from '../../utils/confusion';
 import { playZhuyin, playSoundEffect } from '../../services/audioService';
 
-
+interface GameState {
+    score: number;
+    combo: number;
+    targetSymbol: string | null;
+    showHint: boolean;
+    isCannonJammed: boolean;
+    ammoType: 'cannon' | 'air';
+}
 
 interface UseSoundHunterGameProps {
     onBack: () => void;
 }
 
-export const useSoundHunterGame = ({ }: UseSoundHunterGameProps) => {
+export const useSoundHunterGame = ({ onBack }: UseSoundHunterGameProps) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const appRef = useRef<PIXI.Application | null>(null);
 
@@ -78,9 +85,13 @@ export const useSoundHunterGame = ({ }: UseSoundHunterGameProps) => {
             symbol: string;
             vx: number;
             vy: number;
-            impulseX: number; // Physics Damping: Knockback X
-            impulseY: number; // Physics Damping: Knockback Y
-            textObj: PIXI.Text
+            impulseX: number;
+            impulseY: number;
+            textObj: PIXI.Text;
+            faceState: 'normal' | 'surprised' | 'dizzy';
+            faceTimer: number;
+            drawFace: (state: 'normal' | 'surprised' | 'dizzy', blink?: boolean) => void;
+            color: number;
         }[] = [];
         const keysPressed: { [key: string]: boolean } = {};
 
@@ -151,25 +162,35 @@ export const useSoundHunterGame = ({ }: UseSoundHunterGameProps) => {
             };
 
             // --- Effects ---
-            const createExplosion = (x: number, y: number) => {
-                const particles: { graphics: PIXI.Graphics; vx: number; vy: number; life: number }[] = [];
-                const particleCount = 20;
+            const createExplosion = (x: number, y: number, color: number) => {
+                const particles: { graphics: PIXI.Graphics; vx: number; vy: number; life: number; rot: number }[] = [];
+                const particleCount = 30;
 
                 for (let i = 0; i < particleCount; i++) {
                     const p = new PIXI.Graphics();
-                    const isStar = Math.random() > 0.5;
-                    if (isStar) p.star(0, 0, 5, 10, 5);
-                    else p.circle(0, 0, 5);
+                    const isStar = Math.random() > 0.3;
+                    if (isStar) {
+                        p.star(0, 0, 5, 12, 6);
+                    } else {
+                        p.rect(0, 0, 8, 8);
+                    }
 
-                    p.fill(0xFFFF00);
+                    p.fill(color);
                     p.x = x;
                     p.y = y;
+                    p.rotation = Math.random() * Math.PI * 2;
 
                     const angle = Math.random() * Math.PI * 2;
-                    const speed = Math.random() * 5 + 2;
+                    const speed = Math.random() * 8 + 3;
 
                     app.stage.addChild(p);
-                    particles.push({ graphics: p, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, life: 1.0 });
+                    particles.push({
+                        graphics: p,
+                        vx: Math.cos(angle) * speed,
+                        vy: Math.sin(angle) * speed,
+                        life: 1.0,
+                        rot: (Math.random() - 0.5) * 0.2
+                    });
                 }
 
                 const animateParticles = () => {
@@ -177,8 +198,10 @@ export const useSoundHunterGame = ({ }: UseSoundHunterGameProps) => {
                         const p = particles[i];
                         p.graphics.x += p.vx;
                         p.graphics.y += p.vy;
+                        p.graphics.rotation += p.rot;
                         p.life -= 0.02;
                         p.graphics.alpha = p.life;
+                        p.graphics.scale.set(p.life);
 
                         if (p.life <= 0) {
                             app.stage.removeChild(p.graphics);
@@ -188,6 +211,40 @@ export const useSoundHunterGame = ({ }: UseSoundHunterGameProps) => {
                     if (particles.length > 0) requestAnimationFrame(animateParticles);
                 };
                 animateParticles();
+            };
+
+            const createDizzyEffect = (x: number, y: number) => {
+                const container = new PIXI.Container();
+                container.x = x;
+                container.y = y - 50;
+                app.stage.addChild(container);
+
+                const spirals: PIXI.Graphics[] = [];
+                for (let i = 0; i < 3; i++) {
+                    const s = new PIXI.Graphics();
+                    s.arc(0, 0, 15, 0, Math.PI * 1.5);
+                    s.stroke({ width: 3, color: 0xFFFFFF });
+                    s.x = (i - 1) * 20;
+                    container.addChild(s);
+                    spirals.push(s);
+                }
+
+                let life = 1.0;
+                const animate = () => {
+                    life -= 0.02;
+                    container.y -= 1;
+                    container.alpha = life;
+                    spirals.forEach((s, i) => {
+                        s.rotation += 0.1 * (i % 2 === 0 ? 1 : -1);
+                    });
+
+                    if (life <= 0) {
+                        app.stage.removeChild(container);
+                    } else {
+                        requestAnimationFrame(animate);
+                    }
+                };
+                animate();
             };
 
             const shakeObject = (obj: PIXI.Container) => {
@@ -275,14 +332,59 @@ export const useSoundHunterGame = ({ }: UseSoundHunterGameProps) => {
                     const createBalloon = (symbol: string, x: number, y: number) => {
                         try {
                             const container = new PIXI.Container();
+                            const color = getSymbolColor(symbol);
+
+                            // Balloon Body
                             const gfx = new PIXI.Graphics();
                             gfx.ellipse(0, -10, 40, 50);
-                            gfx.fill(getSymbolColor(symbol));
+                            gfx.fill(color);
                             gfx.stroke({ width: 2, color: 0xFFFFFF });
                             gfx.moveTo(0, 40);
                             gfx.lineTo(0, 60);
                             gfx.stroke({ width: 1, color: 0xDDDDDD });
                             container.addChild(gfx);
+
+                            // Face Container
+                            const face = new PIXI.Container();
+                            face.y = -15;
+                            container.addChild(face);
+
+                            const leftEye = new PIXI.Graphics();
+                            const rightEye = new PIXI.Graphics();
+                            const mouth = new PIXI.Graphics();
+                            face.addChild(leftEye);
+                            face.addChild(rightEye);
+                            face.addChild(mouth);
+
+                            const drawFace = (state: 'normal' | 'surprised' | 'dizzy', blink: boolean = false) => {
+                                leftEye.clear();
+                                rightEye.clear();
+                                mouth.clear();
+                                const eyeColor = 0x333333;
+
+                                if (state === 'normal') {
+                                    if (blink) {
+                                        leftEye.moveTo(-15, 0).lineTo(-5, 0).stroke({ width: 3, color: eyeColor });
+                                        rightEye.moveTo(5, 0).lineTo(15, 0).stroke({ width: 3, color: eyeColor });
+                                    } else {
+                                        leftEye.circle(-10, 0, 4).fill(eyeColor);
+                                        rightEye.circle(10, 0, 4).fill(eyeColor);
+                                    }
+                                    mouth.arc(0, 5, 8, 0.2, Math.PI - 0.2).stroke({ width: 3, color: eyeColor });
+                                } else if (state === 'surprised') {
+                                    leftEye.circle(-10, 0, 6).stroke({ width: 2, color: eyeColor }).fill(0xFFFFFF);
+                                    rightEye.circle(10, 0, 6).stroke({ width: 2, color: eyeColor }).fill(0xFFFFFF);
+                                    leftEye.circle(-10, 0, 2).fill(eyeColor);
+                                    rightEye.circle(10, 0, 2).fill(eyeColor);
+                                    mouth.circle(0, 10, 6).stroke({ width: 3, color: eyeColor });
+                                } else if (state === 'dizzy') {
+                                    leftEye.moveTo(-14, -4).lineTo(-6, 4).moveTo(-6, -4).lineTo(-14, 4).stroke({ width: 3, color: eyeColor });
+                                    rightEye.moveTo(6, -4).lineTo(14, 4).moveTo(14, -4).lineTo(6, 4).stroke({ width: 3, color: eyeColor });
+                                    mouth.moveTo(-10, 10).bezierCurveTo(-5, 5, 5, 15, 10, 10).stroke({ width: 3, color: eyeColor });
+                                }
+                            };
+
+                            drawFace('normal');
 
                             const text = new PIXI.Text({
                                 text: symbol,
@@ -292,10 +394,11 @@ export const useSoundHunterGame = ({ }: UseSoundHunterGameProps) => {
                                     fontWeight: 'bold',
                                     fill: 0xFFFFFF,
                                     align: 'center',
+                                    stroke: { color: 0x000000, width: 4, join: 'round' }
                                 }
                             });
                             text.anchor.set(0.5);
-                            text.y = -10;
+                            text.y = 20;
                             container.addChild(text);
 
                             container.x = x;
@@ -309,7 +412,11 @@ export const useSoundHunterGame = ({ }: UseSoundHunterGameProps) => {
                                 vy: (Math.random() - 0.5) * 1,
                                 impulseX: 0,
                                 impulseY: 0,
-                                textObj: text
+                                textObj: text,
+                                faceState: 'normal',
+                                faceTimer: Math.random() * 200,
+                                drawFace,
+                                color
                             });
                             console.log(`[Spawn] Created balloon: ${symbol} at (${x}, ${y})`);
                         } catch (err) {
@@ -320,7 +427,6 @@ export const useSoundHunterGame = ({ }: UseSoundHunterGameProps) => {
                     // Helper to find position
                     const findPosition = (existingPositions: { x: number, y: number }[]): { x: number, y: number } | null => {
                         let x = 0, y = 0, valid = false, attempts = 0;
-                        // Try strict buffer first
                         while (!valid && attempts < 100) {
                             x = Math.random() * (app.screen.width - 100) + 50;
                             y = Math.random() * (app.screen.height * 0.35) + 50;
@@ -331,7 +437,6 @@ export const useSoundHunterGame = ({ }: UseSoundHunterGameProps) => {
                             }
                             attempts++;
                         }
-                        // Fallback to relaxed buffer
                         if (!valid) {
                             attempts = 0;
                             while (!valid && attempts < 50) {
@@ -348,13 +453,12 @@ export const useSoundHunterGame = ({ }: UseSoundHunterGameProps) => {
                         return valid ? { x, y } : null;
                     };
 
-                    // 1. Calculate Target Position FIRST (Guaranteed spot)
+                    // 1. Calculate Target Position FIRST
                     const targetPos = findPosition(spawnedPositions);
                     if (targetPos) {
                         spawnedPositions.push(targetPos);
                         console.log(`[Spawn] Target position found: (${targetPos.x}, ${targetPos.y})`);
                     } else {
-                        // Absolute fallback if screen is somehow full (unlikely with empty screen)
                         const fallbackPos = { x: app.screen.width / 2, y: 100 };
                         spawnedPositions.push(fallbackPos);
                         console.warn(`[Spawn] Target position fallback used: (${fallbackPos.x}, ${fallbackPos.y})`);
@@ -370,11 +474,10 @@ export const useSoundHunterGame = ({ }: UseSoundHunterGameProps) => {
                         }
                     }
 
-                    // 3. Render Distractors FIRST (Bottom Layer)
+                    // 3. Render Distractors FIRST
                     validDistractors.forEach(d => createBalloon(d.symbol, d.x, d.y));
 
-                    // 4. Render Target LAST (Top Layer)
-                    // Use the first position in spawnedPositions which corresponds to target
+                    // 4. Render Target LAST
                     if (spawnedPositions.length > 0) {
                         console.log(`[Spawn] Rendering target: ${target}`);
                         createBalloon(target, spawnedPositions[0].x, spawnedPositions[0].y);
@@ -432,16 +535,34 @@ export const useSoundHunterGame = ({ }: UseSoundHunterGameProps) => {
                     }
                 }
 
-                // Update Targets (Physics)
+                // Update Targets (Physics & Faces)
                 for (let i = targets.length - 1; i >= 0; i--) {
                     const t = targets[i];
+
+                    // Face Animation
+                    t.faceTimer++;
+                    if (t.faceState === 'normal') {
+                        if (t.faceTimer > 200) { // Blink every ~3-4 seconds
+                            t.drawFace('normal', true); // Blink
+                            if (t.faceTimer > 210) {
+                                t.faceTimer = 0;
+                                t.drawFace('normal', false); // Open
+                            }
+                        }
+                    } else if (t.faceState === 'surprised' || t.faceState === 'dizzy') {
+                        if (t.faceTimer > 120) { // Return to normal after 2 seconds
+                            t.faceState = 'normal';
+                            t.faceTimer = 0;
+                            t.drawFace('normal');
+                        }
+                    }
 
                     // Apply Velocity + Impulse
                     t.graphics.x += t.vx + t.impulseX;
                     t.graphics.y += t.vy + t.impulseY;
 
-                    // Impulse Decay (Damping)
-                    t.impulseX *= 0.95; // Decay factor (Slower decay for drift)
+                    // Impulse Decay
+                    t.impulseX *= 0.95;
                     t.impulseY *= 0.95;
                     if (Math.abs(t.impulseX) < 0.1) t.impulseX = 0;
                     if (Math.abs(t.impulseY) < 0.1) t.impulseY = 0;
@@ -449,7 +570,7 @@ export const useSoundHunterGame = ({ }: UseSoundHunterGameProps) => {
                     // Boundary Bounce
                     if (t.graphics.x < 40 || t.graphics.x > app.screen.width - 40) {
                         t.vx *= -1;
-                        t.impulseX *= -0.5; // Dampen impulse on wall hit
+                        t.impulseX *= -0.5;
                         t.graphics.x = Math.max(40, Math.min(t.graphics.x, app.screen.width - 40));
                     }
                     if (t.graphics.y < 40 || t.graphics.y > app.screen.height * 0.45) {
@@ -473,26 +594,31 @@ export const useSoundHunterGame = ({ }: UseSoundHunterGameProps) => {
                                 createShockwave(b.graphics.x, b.graphics.y);
                                 playSoundEffect('shoot');
 
-                                // AOE Push with Impulse
+                                // AOE Push
                                 targets.forEach(target => {
                                     const tdx = target.graphics.x - b.graphics.x;
                                     const tdy = target.graphics.y - b.graphics.y;
                                     const dist = Math.sqrt(tdx * tdx + tdy * tdy);
 
-                                    if (dist < 250) { // Increased range slightly
-                                        const force = (250 - dist) / 25; // Much gentler push (Wind-like)
+                                    if (dist < 250) {
+                                        const force = (250 - dist) / 25;
                                         const angle = Math.atan2(tdy, tdx);
-                                        // Apply to Impulse instead of Velocity
                                         target.impulseX += Math.cos(angle) * force;
                                         target.impulseY += Math.sin(angle) * force;
-                                        // Removed shakeObject to make it a smooth drift
+
+                                        // Set Surprised Face
+                                        if (target.faceState !== 'dizzy') {
+                                            target.faceState = 'surprised';
+                                            target.faceTimer = 0;
+                                            target.drawFace('surprised');
+                                        }
                                     }
                                 });
                             } else {
                                 // Cannon Logic
                                 if (t.symbol === gameStateRef.current.target) {
                                     playSoundEffect('correct');
-                                    createExplosion(t.graphics.x, t.graphics.y);
+                                    createExplosion(t.graphics.x, t.graphics.y, t.color);
                                     app.stage.removeChild(t.graphics);
                                     targets.splice(i, 1);
                                     gameStateRef.current.score += 10 + (gameStateRef.current.combo * 2);
@@ -503,8 +629,14 @@ export const useSoundHunterGame = ({ }: UseSoundHunterGameProps) => {
                                 } else {
                                     playSoundEffect('wrong');
                                     shakeObject(t.graphics);
+                                    createDizzyEffect(t.graphics.x, t.graphics.y);
+
+                                    // Set Dizzy Face
+                                    t.faceState = 'dizzy';
+                                    t.faceTimer = 0;
+                                    t.drawFace('dizzy');
+
                                     const angle = Math.atan2(dy, dx);
-                                    // Apply to Impulse for bounce
                                     t.impulseX += -Math.cos(angle) * 10;
                                     t.impulseY += -Math.sin(angle) * 10;
 
@@ -536,7 +668,7 @@ export const useSoundHunterGame = ({ }: UseSoundHunterGameProps) => {
         return () => {
             cleanupPromise.then(cleanup => cleanup && cleanup());
         };
-    }, []); // Empty dependency array - init once
+    }, []);
 
     return {
         containerRef,
