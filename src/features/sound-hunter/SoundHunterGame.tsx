@@ -13,7 +13,9 @@ export const SoundHunterGame = ({ onBack }: SoundHunterGameProps) => {
         showHint,
         isCannonJammed,
         ammoType,
-        handleReplayAudio
+        handleReplayAudio,
+        controlMode,
+        setControlMode
     } = useSoundHunterGame({ onBack });
 
     return (
@@ -34,6 +36,12 @@ export const SoundHunterGame = ({ onBack }: SoundHunterGameProps) => {
                 <div className={`mt-2 px-3 py-1 rounded-full text-lg font-bold ${ammoType === 'cannon' ? 'bg-yellow-600 text-white' : 'bg-cyan-600 text-white'}`}>
                     {ammoType === 'cannon' ? '💣 砲彈 (Cannon)' : '💨 空氣彈 (Air)'}
                 </div>
+                <button
+                    onClick={() => setControlMode(prev => prev === 'keyboard' ? 'mouse' : 'keyboard')}
+                    className="mt-2 px-3 py-1 rounded-full text-lg font-bold bg-purple-600 hover:bg-purple-500 text-white transition-colors"
+                >
+                    {controlMode === 'keyboard' ? '⌨️ 鍵盤 (Keyboard)' : '🖱️ 滑鼠 (Mouse)'}
+                </button>
             </div>
 
             {/* 重播按鈕 */}
@@ -74,7 +82,7 @@ export const SoundHunterGame = ({ onBack }: SoundHunterGameProps) => {
             <div ref={containerRef} className="border-4 border-white rounded-lg overflow-hidden shadow-2xl relative z-0" />
 
             <div className="mt-2 text-gray-400 text-sm">
-                聽音辨位：請射擊聽到的注音符號！ | ↑↓ 切換子彈
+                聽音辨位：請射擊聽到的注音符號！ | ↑↓ 切換子彈 | {controlMode === 'keyboard' ? '←→ 瞄準' : '滑鼠移動瞄準'}
             </div>
         </div>
     );

@@ -4,15 +4,6 @@ import { ZHUYIN_SYMBOLS, getSymbolColor } from '../../utils/zhuyin';
 import { getConfusingSymbols } from '../../utils/confusion';
 import { playZhuyin, playSoundEffect } from '../../services/audioService';
 
-interface GameState {
-    score: number;
-    combo: number;
-    targetSymbol: string | null;
-    showHint: boolean;
-    isCannonJammed: boolean;
-    ammoType: 'cannon' | 'air';
-}
-
 interface UseSoundHunterGameProps {
     onBack: () => void;
 }
@@ -28,6 +19,7 @@ export const useSoundHunterGame = ({ onBack }: UseSoundHunterGameProps) => {
     const [showHint, setShowHint] = useState(false);
     const [isCannonJammed, setIsCannonJammed] = useState(false);
     const [ammoType, setAmmoType] = useState<'cannon' | 'air'>('cannon');
+    const [controlMode, setControlMode] = useState<'keyboard' | 'mouse'>('keyboard');
 
     // Game Logic State (Refs for performance/closure access)
     const gameStateRef = useRef({
@@ -35,8 +27,20 @@ export const useSoundHunterGame = ({ onBack }: UseSoundHunterGameProps) => {
         isJammed: false,
         score: 0,
         combo: 0,
-        ammoType: 'cannon' as 'cannon' | 'air'
+        ammoType: 'cannon' as 'cannon' | 'air',
+        controlMode: 'keyboard' as 'keyboard' | 'mouse'
     });
+
+    // Sync ref with state
+    useEffect(() => {
+        gameStateRef.current.controlMode = controlMode;
+    }, [controlMode]);
+
+    // Keep onBack ref up to date
+    const onBackRef = useRef(onBack);
+    useEffect(() => {
+        onBackRef.current = onBack;
+    }, [onBack]);
 
     // Audio Helpers
     const speakPhrase = useCallback((text: string, onEnd?: () => void) => {
@@ -504,6 +508,7 @@ export const useSoundHunterGame = ({ onBack }: UseSoundHunterGameProps) => {
             // --- Input Listeners ---
             const handleKeyDown = (e: KeyboardEvent) => {
                 keysPressed[e.code] = true;
+                if (e.code === 'Escape') onBackRef.current();
                 if (e.code === 'Space') shoot();
                 if (e.code === 'ArrowUp' || e.code === 'ArrowDown') {
                     const newType = gameStateRef.current.ammoType === 'cannon' ? 'air' : 'cannon';
@@ -515,14 +520,43 @@ export const useSoundHunterGame = ({ onBack }: UseSoundHunterGameProps) => {
             window.addEventListener('keydown', handleKeyDown);
             window.addEventListener('keyup', handleKeyUp);
 
+            // Mouse Move Listener
+            const handleMouseMove = (e: MouseEvent) => {
+                if (gameStateRef.current.controlMode === 'mouse' && appRef.current) {
+                    const rect = appRef.current.canvas.getBoundingClientRect();
+                    const mouseX = e.clientX - rect.left;
+                    const mouseY = e.clientY - rect.top;
+
+                    // Calculate angle from barrel base
+                    const dx = mouseX - barrel.x;
+                    const dy = mouseY - barrel.y;
+                    let angle = Math.atan2(dy, dx);
+
+                    console.log(`[Mouse] X:${mouseX.toFixed(0)} Y:${mouseY.toFixed(0)} | Barrel X:${barrel.x} Y:${barrel.y} | Angle:${(angle * 180 / Math.PI).toFixed(0)}`);
+
+                    // Clamp angle between 0 and -PI (0 to -180 degrees)
+                    // In PIXI, 0 is right, -PI/2 is up, -PI is left
+                    if (angle > 0) angle = 0; // Prevent aiming down-right
+                    if (angle < -Math.PI) angle = -Math.PI; // Prevent aiming down-left (though atan2 usually handles -PI to PI)
+
+                    // Specific clamping for ground level
+                    if (angle > 0) angle = 0;
+
+                    barrel.rotation = angle;
+                }
+            };
+            window.addEventListener('mousemove', handleMouseMove);
+
             // --- Game Loop ---
             app.ticker.add(() => {
-                // Barrel Rotation
-                const rotationSpeed = 0.02;
-                if (keysPressed['ArrowLeft']) barrel.rotation -= rotationSpeed;
-                if (keysPressed['ArrowRight']) barrel.rotation += rotationSpeed;
-                if (barrel.rotation < -Math.PI) barrel.rotation = -Math.PI;
-                if (barrel.rotation > 0) barrel.rotation = 0;
+                // Barrel Rotation (Keyboard)
+                if (gameStateRef.current.controlMode === 'keyboard') {
+                    const rotationSpeed = 0.02;
+                    if (keysPressed['ArrowLeft']) barrel.rotation -= rotationSpeed;
+                    if (keysPressed['ArrowRight']) barrel.rotation += rotationSpeed;
+                    if (barrel.rotation < -Math.PI) barrel.rotation = -Math.PI;
+                    if (barrel.rotation > 0) barrel.rotation = 0;
+                }
 
                 // Update Bullets
                 for (let i = bullets.length - 1; i >= 0; i--) {
@@ -660,6 +694,7 @@ export const useSoundHunterGame = ({ onBack }: UseSoundHunterGameProps) => {
             return () => {
                 window.removeEventListener('keydown', handleKeyDown);
                 window.removeEventListener('keyup', handleKeyUp);
+                window.removeEventListener('mousemove', handleMouseMove);
                 app.destroy(true, { children: true, texture: true });
             };
         };
@@ -678,6 +713,8 @@ export const useSoundHunterGame = ({ onBack }: UseSoundHunterGameProps) => {
         showHint,
         isCannonJammed,
         ammoType,
-        handleReplayAudio
+        handleReplayAudio,
+        controlMode,
+        setControlMode
     };
 };
